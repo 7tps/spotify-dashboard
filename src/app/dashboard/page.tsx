@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Nunito, Inter } from 'next/font/google';
 import { motion } from 'framer-motion';
@@ -68,16 +68,21 @@ async function fetchWithRefresh(url: string, token: string): Promise<Response> {
 }
 
 const NUM_PARTICLES = 72;
-const PARTICLE_CONFIG = Array.from({ length: NUM_PARTICLES }).map((_, i) => ({
-  size: 16 + Math.random() * 24,
-  baseX: Math.random(),
-  baseY: Math.random(),
-  speed: 0.12 + Math.random() * 0.18, // increase parallax speed
-  opacity: 0.10 + Math.random() * 0.18,
-  driftSpeed: 0.2 + Math.random() * 0.25, // for drifting
-  driftRadius: 16 + Math.random() * 32, // for drifting
-  driftPhase: Math.random() * Math.PI * 2, // for drifting
-}));
+const useParticleConfig = () => {
+  return useMemo(() => {
+    if (typeof window === 'undefined') return [];
+    return Array.from({ length: NUM_PARTICLES }).map((_, i) => ({
+      size: 16 + Math.random() * 24,
+      baseX: Math.random(),
+      baseY: Math.random(),
+      speed: 0.12 + Math.random() * 0.18,
+      opacity: 0.10 + Math.random() * 0.18,
+      driftSpeed: 0.2 + Math.random() * 0.25,
+      driftRadius: 16 + Math.random() * 32,
+      driftPhase: Math.random() * Math.PI * 2,
+    }));
+  }, []);
+};
 
 const DashboardPage: React.FC = () => {
   const [nowPlayingItem, setNowPlayingItem] = useState<NowPlayingItem | null>(null);
@@ -152,10 +157,11 @@ const DashboardPage: React.FC = () => {
     }
   }, [searchParams, router]);
 
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
+
   useEffect(() => {
     const fetchNowPlaying = async () => {
-      setLoading(true);
-      setError(null);
       const token = localStorage.getItem('spotify_access_token');
       if (!token) {
         setError('No access token found. Please log in.');
@@ -171,16 +177,20 @@ const DashboardPage: React.FC = () => {
           setPlaybackState(null);
           setAudioFeatures(null);
           prevSongIdRef.current = null;
+          setLoading(true); // Only loading if nothing is playing
         } else if (!res.ok) {
           setError('Failed to fetch now playing info.');
           setNowPlayingItem(null);
-          setPlaybackState(null);
           setAudioFeatures(null);
           prevSongIdRef.current = null;
+          setLoading(true); // Only loading if error and no song
         } else {
           const data = await res.json();
           const newSongId = data?.item?.id || null;
+          const isPlaying = data?.is_playing;
           if (newSongId && prevSongIdRef.current !== newSongId) {
+            setLoading(true); // Only loading when song changes
+            // Song changed, update everything
             setNowPlayingItem(data.item);
             setPlaybackState({
               progress_ms: data.progress_ms,
@@ -212,8 +222,9 @@ const DashboardPage: React.FC = () => {
               // eslint-disable-next-line no-console
               console.warn('Failed to fetch audio features for song id', newSongId);
             }
+            setLoading(false); // Done loading new song
           } else if (newSongId && prevSongIdRef.current === newSongId) {
-            // only update progress and playback state
+            // Song is the same (even if playing/paused), only update playback state and progress
             setPlaybackState({
               progress_ms: data.progress_ms,
               is_playing: data.is_playing,
@@ -221,13 +232,15 @@ const DashboardPage: React.FC = () => {
             });
             setLocalProgress(data.progress_ms);
             progressRef.current = data.progress_ms;
-            // dont refetch audio features or song info
+            // Do not update nowPlayingItem or audioFeatures
+            setLoading(false); // Not loading if song is the same
           } else {
             // no song or invalid data
             setNowPlayingItem(null);
             setPlaybackState(null);
             setAudioFeatures(null);
             prevSongIdRef.current = null;
+            setLoading(true); // Only loading if nothing is playing
           }
         }
       } catch (e) {
@@ -236,10 +249,10 @@ const DashboardPage: React.FC = () => {
         setPlaybackState(null);
         setAudioFeatures(null);
         prevSongIdRef.current = null;
+        setLoading(true); // Only loading if error and no song
         // eslint-disable-next-line no-console
         console.error('Error fetching now playing:', e);
       }
-      setLoading(false);
     };
     fetchNowPlaying();
     const interval = setInterval(fetchNowPlaying, 5000);
@@ -339,41 +352,45 @@ const DashboardPage: React.FC = () => {
     return () => { running = false; };
   }, []);
 
+  const PARTICLE_CONFIG = useParticleConfig();
+  if (!hasMounted) return null;
+
   return (
     <div
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
       onMouseMove={handleParallax}
     >
-      {/* Parallax accent dot field background */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        {PARTICLE_CONFIG.map((p, i) => {
-          // drifting offset
-          const driftX = Math.sin(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
-          const driftY = Math.cos(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
-          // twinkling opacity
-          const twinkle = 0.5 + 0.5 * Math.sin(driftTime * p.driftSpeed * 0.7 + p.driftPhase * 1.7);
-          const opacity = p.opacity * twinkle;
-          return (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                left: `calc(${p.baseX * 100}% )`,
-                top: `calc(${p.baseY * 100}% )`,
-                width: p.size,
-                height: p.size,
-                background: 'var(--accent)',
-                opacity,
-                borderRadius: '50%',
-                filter: 'blur(2px)',
-                transform: `translate3d(${parallax.x * p.speed * 180 + driftX}px, ${parallax.y * p.speed * 120 + driftY}px, 0)`,
-                transition: 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 1.2s cubic-bezier(.4,0,.2,1)',
-                pointerEvents: 'none',
-              }}
-            />
-          );
-        })}
-      </div>
+      {hasMounted && (
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          {PARTICLE_CONFIG.map((p, i) => {
+            // drifting offset
+            const driftX = Math.sin(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
+            const driftY = Math.cos(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
+            // twinkling opacity
+            const twinkle = 0.5 + 0.5 * Math.sin(driftTime * p.driftSpeed * 0.7 + p.driftPhase * 1.7);
+            const opacity = p.opacity * twinkle;
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  left: `calc(${p.baseX * 100}% )`,
+                  top: `calc(${p.baseY * 100}% )`,
+                  width: p.size,
+                  height: p.size,
+                  background: 'var(--accent)',
+                  opacity,
+                  borderRadius: '50%',
+                  filter: 'blur(2px)',
+                  transform: `translate3d(${parallax.x * p.speed * 180 + driftX}px, ${parallax.y * p.speed * 120 + driftY}px, 0)`,
+                  transition: 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 1.2s cubic-bezier(.4,0,.2,1)',
+                  pointerEvents: 'none',
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
       {/* Radial accent burst for depth */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"

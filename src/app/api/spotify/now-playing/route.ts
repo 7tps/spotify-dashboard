@@ -16,6 +16,18 @@ export async function GET(req: NextRequest) {
   const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = await res.json();
+
+  if (res.status === 204) {
+    // No content
+    return new Response(null, { status: 204 });
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON from Spotify' }, { status: 500 });
+  }
+
   return NextResponse.json(data, { status: res.status });
 } 
