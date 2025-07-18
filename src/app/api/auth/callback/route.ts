@@ -27,8 +27,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: data }, { status: 400 });
   }
 
-  // pass access_token as a query parameter
-  return NextResponse.redirect(
+  // store refresh_token in cookie
+  const res = NextResponse.redirect(
     new URL(`/dashboard?access_token=${data.access_token}`, req.url)
   );
+  if (data.refresh_token) {
+    res.cookies.set('spotify_refresh_token', data.refresh_token, {
+      httpOnly: true,
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60, 
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
+  }
+  return res;
 } 
