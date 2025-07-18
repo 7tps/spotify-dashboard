@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Nunito } from 'next/font/google';
+import { Nunito, Inter } from 'next/font/google';
 import { motion } from 'framer-motion';
 
 const nunito = Nunito({ subsets: ['latin'], weight: ['700'] });
+const inter = Inter({ subsets: ['latin'], weight: ['400', '600', '700'] });
 
 interface NowPlayingItem {
   id: string;
@@ -66,6 +67,18 @@ async function fetchWithRefresh(url: string, token: string): Promise<Response> {
   return res;
 }
 
+const NUM_PARTICLES = 72;
+const PARTICLE_CONFIG = Array.from({ length: NUM_PARTICLES }).map((_, i) => ({
+  size: 16 + Math.random() * 24,
+  baseX: Math.random(),
+  baseY: Math.random(),
+  speed: 0.12 + Math.random() * 0.18, // increase parallax speed
+  opacity: 0.10 + Math.random() * 0.18,
+  driftSpeed: 0.2 + Math.random() * 0.25, // for drifting
+  driftRadius: 16 + Math.random() * 32, // for drifting
+  driftPhase: Math.random() * Math.PI * 2, // for drifting
+}));
+
 const DashboardPage: React.FC = () => {
   const [nowPlayingItem, setNowPlayingItem] = useState<NowPlayingItem | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState | null>(null);
@@ -80,6 +93,20 @@ const DashboardPage: React.FC = () => {
     }
     return 'auto';
   });
+  const presetAccents = [
+    { name: 'Green', value: '#1DB954' },
+    { name: 'Blue', value: '#3B82F6' },
+    { name: 'Purple', value: '#A259FF' },
+    { name: 'Orange', value: '#F59E42' },
+    { name: 'Red', value: '#EF4444' },
+    { name: 'Pink', value: '#EC4899' },
+  ];
+  const [accent, setAccent] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('accent') || '#1DB954';
+    }
+    return '#1DB954';
+  });
 
   // apply theme
   useEffect(() => {
@@ -87,11 +114,30 @@ const DashboardPage: React.FC = () => {
     html.classList.remove('light', 'dark');
     if (theme === 'light') {
       html.classList.add('light');
+      html.style.setProperty('--card-bg', 'rgba(255,255,255,0.92)');
     } else if (theme === 'dark') {
       html.classList.add('dark');
+      html.style.setProperty('--card-bg', 'rgba(35,37,38,0.82)');
+    } else {
+      html.style.setProperty('--card-bg', 'rgba(255,255,255,0.92)');
     }
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  // Helper to convert hex to rgb
+  function hexToRgb(hex: string) {
+    let c = hex.replace('#', '');
+    if (c.length === 3) c = c.split('').map((x) => x + x).join('');
+    const num = parseInt(c, 16);
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255].join(',');
+  }
+
+  // Apply accent color to <html>
+  useEffect(() => {
+    document.documentElement.style.setProperty('--accent', accent);
+    document.documentElement.style.setProperty('--accent-rgb', hexToRgb(accent));
+    localStorage.setItem('accent', accent);
+  }, [accent]);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -215,12 +261,127 @@ const DashboardPage: React.FC = () => {
   // compute background and text classes based on theme
   const isLight = theme === 'light';
   const bgGradient = isLight
-    ? 'bg-gradient-to-br from-white via-green-100 to-[#1DB954]'
-    : 'bg-gradient-to-br from-[#191414] via-[#232526] to-[#1DB954]';
+    ? 'bg-gradient-to-br from-white via-[rgba(var(--accent-rgb),0.15)] to-[rgba(var(--accent-rgb),0.25)]'
+    : 'bg-gradient-to-br from-[#191414] via-[rgba(var(--accent-rgb),0.15)] to-[rgba(var(--accent-rgb),0.25)]';
   const textColor = isLight ? 'text-black' : 'text-white';
 
+  // Animation state for audio-reactive background
+  const [bgPulse, setBgPulse] = useState(1);
+  const animationRef = useRef<number | null>(null);
+
+  // Animate background pulse based on audio features and playback
+  useEffect(() => {
+    if (!audioFeatures || !playbackState) return;
+    let running = true;
+    let lastTime = performance.now();
+    const baseTempo = audioFeatures.tempo || 120;
+    const energy = audioFeatures.energy || 0.5;
+    const loudness = ('loudness' in audioFeatures && typeof (audioFeatures as any).loudness === 'number') ? Math.max(((audioFeatures as any).loudness + 60) / 60, 0) : 0.5;
+    function animate(time: number) {
+      if (!running) return;
+      const elapsed = (time - lastTime) / 1000;
+      // Pulse speed is based on tempo (BPM)
+      const speed = baseTempo / 60;
+      // Pulse intensity is based on energy and loudness
+      const intensity = 0.08 + 0.12 * energy + 0.10 * loudness;
+      // Sine wave for pulsing
+      const pulse = 1 + Math.sin((performance.now() / 1000) * speed * Math.PI * 2) * intensity;
+      setBgPulse(pulse);
+      animationRef.current = requestAnimationFrame(animate);
+    }
+    animationRef.current = requestAnimationFrame(animate);
+    return () => {
+      running = false;
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [audioFeatures, playbackState]);
+
+  // Smooth parallax state for particle field
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const mouseRef = useRef({ x: 0, y: 0 });
+  const animParallax = useRef({ x: 0, y: 0 });
+
+  // Mouse move handler updates ref, not state
+  const handleParallax = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width - 0.5) * 2; // -1 to 1
+    const y = ((e.clientY - top) / height - 0.5) * 2; // -1 to 1
+    mouseRef.current = { x, y };
+  };
+
+  // rAF loop to smoothly interpolate parallax
+  useEffect(() => {
+    let running = true;
+    function animate() {
+      if (!running) return;
+      // Smoothly interpolate animParallax towards mouseRef
+      animParallax.current.x += (mouseRef.current.x - animParallax.current.x) * 0.08;
+      animParallax.current.y += (mouseRef.current.y - animParallax.current.y) * 0.08;
+      setParallax({ x: animParallax.current.x, y: animParallax.current.y });
+      requestAnimationFrame(animate);
+    }
+    animate();
+    return () => { running = false; };
+  }, []);
+
+  // Add time state for drifting
+  const [driftTime, setDriftTime] = useState(0);
+  useEffect(() => {
+    let running = true;
+    let last = performance.now();
+    function tick(now: number) {
+      if (!running) return;
+      setDriftTime((t) => t + (now - last) / 1000);
+      last = now;
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    return () => { running = false; };
+  }, []);
+
   return (
-    <div className={`min-h-screen flex items-center justify-center ${bgGradient} relative overflow-hidden`}>
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden"
+      onMouseMove={handleParallax}
+    >
+      {/* Parallax accent dot field background */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        {PARTICLE_CONFIG.map((p, i) => {
+          // drifting offset
+          const driftX = Math.sin(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
+          const driftY = Math.cos(driftTime * p.driftSpeed + p.driftPhase) * p.driftRadius;
+          // twinkling opacity
+          const twinkle = 0.5 + 0.5 * Math.sin(driftTime * p.driftSpeed * 0.7 + p.driftPhase * 1.7);
+          const opacity = p.opacity * twinkle;
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                left: `calc(${p.baseX * 100}% )`,
+                top: `calc(${p.baseY * 100}% )`,
+                width: p.size,
+                height: p.size,
+                background: 'var(--accent)',
+                opacity,
+                borderRadius: '50%',
+                filter: 'blur(2px)',
+                transform: `translate3d(${parallax.x * p.speed * 180 + driftX}px, ${parallax.y * p.speed * 120 + driftY}px, 0)`,
+                transition: 'transform 0.3s cubic-bezier(.4,0,.2,1), opacity 1.2s cubic-bezier(.4,0,.2,1)',
+                pointerEvents: 'none',
+              }}
+            />
+          );
+        })}
+      </div>
+      {/* Radial accent burst for depth */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, rgba(var(--accent-rgb),0.35) 0%, rgba(var(--accent-rgb),0.18) 40%, transparent 80%)`,
+          filter: `blur(0px)`
+        }}
+      />
       {/* Settings Button */}
       <button
         className="absolute top-6 right-6 z-20 bg-white/20 hover:bg-white/30 text-white rounded-full p-2 shadow-lg transition"
@@ -252,8 +413,8 @@ const DashboardPage: React.FC = () => {
             >
               &times;
             </button>
-            <h2 className="text-2xl font-bold mb-4 text-center text-[#1DB954]">Settings</h2>
-            <div className="space-y-4">
+            <h2 className={`text-2xl font-extrabold mb-6 text-center text-[var(--accent)] ${nunito.className}`}>Settings</h2>
+            <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <span className="text-gray-800 font-medium">Theme</span>
                 <div className="flex gap-2">
@@ -290,6 +451,20 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-gray-800 font-medium">Accent Color</span>
+                <div className="flex gap-2">
+                  {presetAccents.map((preset) => (
+                    <button
+                      key={preset.value}
+                      className={`w-6 h-6 rounded-full border-2 ${accent === preset.value ? 'border-[var(--accent)] scale-110' : 'border-gray-300'} focus:outline-none transition`}
+                      style={{ backgroundColor: preset.value }}
+                      aria-label={preset.name}
+                      onClick={() => setAccent(preset.value)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-gray-800 font-medium">Visualizer Type</span>
                 <span className="text-gray-500 italic">(coming soon)</span>
               </div>
@@ -300,7 +475,7 @@ const DashboardPage: React.FC = () => {
             </div>
             <div className="mt-8 flex justify-center">
               <button
-                className="px-6 py-2 bg-[#1DB954] text-white rounded-lg font-bold shadow hover:bg-[#159c43] transition"
+                className="px-6 py-2 bg-[var(--accent)] text-white rounded-lg font-bold shadow hover:opacity-90 transition"
                 onClick={() => setSettingsOpen(false)}
               >
                 Close
@@ -309,42 +484,37 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       )}
-      <div className="absolute w-[600px] h-[600px] bg-[#1DB954]/20 rounded-full blur-3xl top-[-200px] left-[-200px] z-0" />
-      <div className="absolute w-[400px] h-[400px] bg-[#191414]/40 rounded-full blur-2xl bottom-[-100px] right-[-100px] z-0" />
-      <main className={`z-10 w-full max-w-lg mx-auto p-8 rounded-2xl shadow-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col items-center ${textColor}`}>
-        <img src="https://upload.wikimedia.org/wikipedia/commons/8/84/Spotify_icon.svg" alt="Spotify Logo" width={48} height={48} className="mb-4 drop-shadow-lg" />
-        <h1 className={`text-2xl font-bold mb-6 tracking-tight text-center drop-shadow-lg ${nunito.className} ${textColor}`}>Now Playing</h1>
+      {/* Simple card (not glassmorphism) */}
+      <main className={`z-10 w-full max-w-lg mx-auto px-12 py-14 rounded-3xl shadow-2xl bg-[var(--card-bg)] border border-white/30 flex flex-col items-center ${inter.className} ${textColor}`}
+      >
+        <img src="https://upload.wikimedia.org/wikipedia/commons/8/84/Spotify_icon.svg" alt="Spotify Logo" width={56} height={56} className="mb-6 drop-shadow-xl" />
+        <h1 className={`text-4xl font-extrabold mb-8 tracking-tight text-center drop-shadow-lg ${nunito.className} ${textColor}`}>Now Playing</h1>
+        {/* Song Info */}
         {loading ? (
-          <div className="text-white/80 text-lg">Loading...</div>
+          <div className="text-lg font-semibold opacity-70 mb-8">Loading...</div>
         ) : error ? (
-          <div className="text-red-400 text-lg font-medium">{error}</div>
+          <div className="text-lg font-bold text-red-500 mb-8">{error}</div>
         ) : nowPlayingItem ? (
           <>
-            <div className="flex flex-col items-center w-full">
+            <div className="flex flex-col items-center w-full mb-8">
               <img
                 src={nowPlayingItem.album.images[0]?.url}
                 alt="Album Art"
-                className="w-48 h-48 rounded-xl shadow-lg mb-4 border border-white/20"
+                className="w-56 h-56 rounded-2xl shadow-2xl mb-6 border-4 border-white/40"
               />
-              <div className={`text-xl font-semibold text-center mb-1 ${nunito.className} ${textColor}`}>{nowPlayingItem.name}</div>
-              <div className={`text-center mb-4 ${isLight ? 'text-gray-700' : 'text-white/80'}`}>{nowPlayingItem.artists.map((a) => a.name).join(', ')}</div>
+              <div className={`text-2xl sm:text-3xl font-extrabold text-center mb-2 leading-tight ${nunito.className} ${textColor}`}>{nowPlayingItem.name}</div>
+              <div className={`text-lg font-medium text-center mb-6 ${isLight ? 'text-gray-700' : 'text-white/80'}`}>{nowPlayingItem.artists.map((a) => a.name).join(', ')}</div>
               {/* Progress Bar */}
-              <div className="w-full flex flex-col items-center">
-                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-2">
+              <div className="w-full flex flex-col items-center mb-2">
+                <div className="w-full h-2 bg-white/30 rounded-full overflow-hidden mb-2">
                   <div
-                    className="h-2 bg-[#1DB954] rounded-full transition-all duration-300"
-                    style={{
-                      width: `${(localProgress / (playbackState?.duration_ms || 1)) * 100}%`,
-                    }}
+                    className="h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(localProgress / (playbackState?.duration_ms || 1)) * 100}%`, backgroundColor: 'var(--accent)' }}
                   />
                 </div>
-                <div className={`flex justify-between w-full text-xs ${isLight ? 'text-gray-600' : 'text-white/70'}`}>
-                  <span>
-                    {new Date(localProgress).toISOString().substr(14, 5)}
-                  </span>
-                  <span>
-                    {new Date(playbackState?.duration_ms || 0).toISOString().substr(14, 5)}
-                  </span>
+                <div className={`flex justify-between w-full text-xs font-semibold tracking-wide ${isLight ? 'text-gray-600' : 'text-white/70'}`}> 
+                  <span>{new Date(localProgress).toISOString().substr(14, 5)}</span>
+                  <span>{new Date(playbackState?.duration_ms || 0).toISOString().substr(14, 5)}</span>
                 </div>
               </div>
             </div>
@@ -357,16 +527,14 @@ const DashboardPage: React.FC = () => {
                     <div key={key} className="flex flex-col items-center">
                       <span className={`${isLight ? 'text-gray-700' : 'text-white/80'} text-sm mb-1`}>{label}</span>
                       <motion.div
-                        className="w-20 h-4 rounded-full bg-[#1DB954]/30 overflow-hidden mb-1"
+                        className="w-20 h-4 rounded-full overflow-hidden mb-1"
                         initial={{ width: 0 }}
                         animate={{ width: audioFeatures[key as keyof AudioFeatures] !== undefined ? `${Math.min((key === 'tempo' ? audioFeatures[key as keyof AudioFeatures] / 200 : audioFeatures[key as keyof AudioFeatures]) * 100, 100)}%` : '0%' }}
                         transition={{ duration: 0.6 }}
                       >
                         <div
-                          className="h-4 bg-[#1DB954] rounded-full"
-                          style={{
-                            width: '100%',
-                          }}
+                          className="h-4 rounded-full"
+                          style={{ width: '100%', backgroundColor: 'var(--accent)' }}
                         />
                       </motion.div>
                       <span className={`${isLight ? 'text-gray-600' : 'text-white/70'} text-xs`}>
@@ -391,4 +559,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default DashboardPage; 
+export default DashboardPage;

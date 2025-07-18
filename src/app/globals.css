@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --accent: #1DB954;
 }
 
 html.light {
@@ -33,4 +34,70 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes blob1 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-20px) scale(1.08); }
+}
+@keyframes blob2 {
+  0%, 100% { transform: translateX(0) scale(1); }
+  50% { transform: translateX(30px) scale(1.12); }
+}
+@keyframes blob3 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(24px) scale(0.96); }
+}
+@keyframes blob4 {
+  0%, 100% { transform: translateX(0) scale(1); }
+  50% { transform: translateX(-24px) scale(1.07); }
+}
+.animate-blob1 { animation: blob1 16s ease-in-out infinite; }
+.animate-blob2 { animation: blob2 18s ease-in-out infinite; }
+.animate-blob3 { animation: blob3 20s ease-in-out infinite; }
+.animate-blob4 { animation: blob4 22s ease-in-out infinite; }
+
+@keyframes morph1 {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  20% { border-radius: 60% 40% 55% 45% / 45% 55% 60% 40%; }
+  40% { border-radius: 50% 60% 40% 60% / 60% 40% 50% 50%; }
+  60% { border-radius: 55% 45% 60% 40% / 50% 60% 40% 60%; }
+  80% { border-radius: 45% 55% 50% 50% / 60% 40% 60% 40%; }
+}
+@keyframes morph2 {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  25% { border-radius: 40% 60% 45% 55% / 55% 45% 60% 40%; }
+  50% { border-radius: 60% 40% 60% 40% / 40% 60% 40% 60%; }
+  75% { border-radius: 55% 45% 50% 50% / 50% 55% 45% 60%; }
+}
+@keyframes morph3 {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  30% { border-radius: 60% 40% 50% 50% / 50% 60% 40% 60%; }
+  60% { border-radius: 45% 55% 60% 40% / 60% 40% 60% 40%; }
+  90% { border-radius: 50% 60% 40% 60% / 40% 60% 50% 50%; }
+}
+@keyframes morph4 {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  35% { border-radius: 55% 45% 60% 40% / 60% 40% 50% 50%; }
+  70% { border-radius: 40% 60% 45% 55% / 55% 45% 60% 40%; }
+}
+.morph-blob1 {
+  border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  filter: blur(64px);
+  animation: morph1 18s ease-in-out infinite;
+}
+.morph-blob2 {
+  border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  filter: blur(48px);
+  animation: morph2 22s ease-in-out infinite;
+}
+.morph-blob3 {
+  border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  filter: blur(56px);
+  animation: morph3 20s ease-in-out infinite;
+}
+.morph-blob4 {
+  border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%;
+  filter: blur(40px);
+  animation: morph4 24s ease-in-out infinite;
 }
