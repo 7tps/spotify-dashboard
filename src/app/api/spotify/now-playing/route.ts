@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+async function fetchSpotifyNowPlaying(token: string) {
+  const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res;
+}
+
 export async function GET(req: NextRequest) {
-  // try to get the token from the query string or auth header
   const url = new URL(req.url);
   let token = url.searchParams.get('access_token');
   if (!token) {
@@ -13,9 +19,12 @@ export async function GET(req: NextRequest) {
   if (!token) {
     return NextResponse.json({ error: 'No access token' }, { status: 401 });
   }
-  const res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+
+  let res = await fetchSpotifyNowPlaying(token);
+
+  if (res.status === 401) {
+    return NextResponse.json({ error: 'Spotify session expired. Please log in again.' }, { status: 401 });
+  }
 
   if (res.status === 204) {
     // No content

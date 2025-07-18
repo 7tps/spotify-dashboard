@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// All required scopes for playback and audio features
 const scopes = [
   'user-read-playback-state',
   'user-read-currently-playing',
@@ -9,7 +8,6 @@ const scopes = [
   'streaming',
   'user-modify-playback-state',
   'user-library-read',
-  'user-library-modify',
   'playlist-read-private',
   'playlist-read-collaborative',
   'playlist-modify-public',
@@ -17,10 +15,11 @@ const scopes = [
 ];
 
 export async function GET(req: NextRequest) {
+  const redirectUri = 'http://127.0.0.1:3000/api/auth/callback';
   const params = new URLSearchParams({
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     response_type: 'code',
-    redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
+    redirect_uri: redirectUri,
     scope: scopes.join(' '),
     show_dialog: 'true',
   });

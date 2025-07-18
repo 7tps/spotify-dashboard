@@ -219,8 +219,14 @@ const DashboardPage: React.FC = () => {
               }
             } else {
               setAudioFeatures(null);
-              // eslint-disable-next-line no-console
-              console.warn('Failed to fetch audio features for song id', newSongId);
+              try {
+                const errorBody = await featuresRes.json();
+                // eslint-disable-next-line no-console
+                console.error('Failed to fetch audio features for song id', newSongId, errorBody);
+              } catch (e) {
+                // eslint-disable-next-line no-console
+                console.error('Failed to fetch audio features for song id', newSongId, '(no body)', e);
+              }
             }
             setLoading(false); // Done loading new song
           } else if (newSongId && prevSongIdRef.current === newSongId) {

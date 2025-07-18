@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
 
   const data = await response.json();
   if (!response.ok) {
+    // Log the full error from Spotify for debugging
+    // eslint-disable-next-line no-console
+    console.error('Spotify refresh error:', data);
     return NextResponse.json({ error: data }, { status: 400 });
   }
 
