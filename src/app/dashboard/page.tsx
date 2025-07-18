@@ -7,16 +7,18 @@ import { motion } from 'framer-motion';
 
 const nunito = Nunito({ subsets: ['latin'], weight: ['700'] });
 
-interface NowPlaying {
-  item: {
-    id: string;
-    name: string;
-    artists: { name: string }[];
-    album: { images: { url: string }[] };
-    duration_ms: number;
-  };
+interface NowPlayingItem {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  album: { images: { url: string }[] };
+  duration_ms: number;
+}
+
+interface PlaybackState {
   progress_ms: number;
   is_playing: boolean;
+  duration_ms: number;
 }
 
 interface AudioFeatures {
@@ -65,18 +67,18 @@ async function fetchWithRefresh(url: string, token: string): Promise<Response> {
 }
 
 const DashboardPage: React.FC = () => {
-  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [nowPlayingItem, setNowPlayingItem] = useState<NowPlayingItem | null>(null);
+  const [playbackState, setPlaybackState] = useState<PlaybackState | null>(null);
   const [audioFeatures, setAudioFeatures] = useState<AudioFeatures | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
   const progressRef = useRef<number>(0);
-  const prevSongIdRef = useRef<string | null>(null); // Track previous song id
+  const prevSongIdRef = useRef<string | null>(null); 
 
   useEffect(() => {
     const tokenFromQuery = searchParams.get('access_token');
@@ -97,36 +99,36 @@ const DashboardPage: React.FC = () => {
         return;
       }
       try {
-        // Use the proxy endpoint for now playing
+        // use the proxy endpoint for now playing
         const res = await fetch(`/api/spotify/now-playing?access_token=${token}`);
         if (res.status === 204) {
           setError('Nothing is currently playing.');
-          setNowPlaying(null);
+          setNowPlayingItem(null);
+          setPlaybackState(null);
           setAudioFeatures(null);
           prevSongIdRef.current = null;
         } else if (!res.ok) {
           setError('Failed to fetch now playing info.');
-          setNowPlaying(null);
+          setNowPlayingItem(null);
+          setPlaybackState(null);
           setAudioFeatures(null);
           prevSongIdRef.current = null;
         } else {
           const data = await res.json();
           const newSongId = data?.item?.id || null;
           if (newSongId && prevSongIdRef.current !== newSongId) {
-            // Song changed, update everything
-            setNowPlaying(data);
+            setNowPlayingItem(data.item);
+            setPlaybackState({
+              progress_ms: data.progress_ms,
+              is_playing: data.is_playing,
+              duration_ms: data.item.duration_ms,
+            });
+            setLocalProgress(data.progress_ms);
+            progressRef.current = data.progress_ms;
             prevSongIdRef.current = newSongId;
-            if (data?.progress_ms && data?.item?.duration_ms) {
-              setLocalProgress(data.progress_ms);
-              progressRef.current = data.progress_ms;
-              setDuration(data.item.duration_ms);
-              setIsPlaying(data.is_playing);
-            }
-            // Fetch audio features for new song
             const featuresRes = await fetch(`/api/spotify/audio-features?access_token=${token}&id=${newSongId}`);
             if (featuresRes.ok) {
               const features = await featuresRes.json();
-              // Check for required fields
               if (
                 typeof features.tempo === 'number' &&
                 typeof features.energy === 'number' &&
@@ -147,25 +149,27 @@ const DashboardPage: React.FC = () => {
               console.warn('Failed to fetch audio features for song id', newSongId);
             }
           } else if (newSongId && prevSongIdRef.current === newSongId) {
-            // Song is the same, only update progress and playback state
-            setNowPlaying((prev) => prev ? { ...prev, ...data } : data);
-            if (data?.progress_ms && data?.item?.duration_ms) {
-              setLocalProgress(data.progress_ms);
-              progressRef.current = data.progress_ms;
-              setDuration(data.item.duration_ms);
-              setIsPlaying(data.is_playing);
-            }
-            // Do not refetch audio features
+            // only update progress and playback state
+            setPlaybackState({
+              progress_ms: data.progress_ms,
+              is_playing: data.is_playing,
+              duration_ms: data.item.duration_ms,
+            });
+            setLocalProgress(data.progress_ms);
+            progressRef.current = data.progress_ms;
+            // dont refetch audio features or song info
           } else {
-            // No song or invalid data
-            setNowPlaying(null);
+            // no song or invalid data
+            setNowPlayingItem(null);
+            setPlaybackState(null);
             setAudioFeatures(null);
             prevSongIdRef.current = null;
           }
         }
       } catch (e) {
         setError('Failed to fetch now playing info.');
-        setNowPlaying(null);
+        setNowPlayingItem(null);
+        setPlaybackState(null);
         setAudioFeatures(null);
         prevSongIdRef.current = null;
         // eslint-disable-next-line no-console
@@ -179,19 +183,68 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!playbackState?.is_playing) return;
     const interval = setInterval(() => {
       setLocalProgress((prev) => {
-        if (prev + 100 >= duration) return duration;
+        if (prev + 100 >= (playbackState?.duration_ms || 0)) return playbackState?.duration_ms || 0;
         progressRef.current = prev + 100;
         return prev + 100;
       });
     }, 100);
     return () => clearInterval(interval);
-  }, [isPlaying, duration]);
+  }, [playbackState]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#191414] via-[#232526] to-[#1DB954] relative overflow-hidden">
+      {/* Settings Button */}
+      <button
+        className="absolute top-6 right-6 z-20 bg-white/20 hover:bg-white/30 text-white rounded-full p-2 shadow-lg transition"
+        aria-label="Open settings"
+        onClick={() => setSettingsOpen(true)}
+      >
+        {/* Standard Gear Icon */}
+        <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.5 1.1V21a2 2 0 1 1-4 0v-.1A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.1-1.5H3a2 2 0 1 1 0-4h.1A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6c.2-.08.41-.13.62-.16V3a2 2 0 1 1 4 0v.1c.21.03.42.08.62.16a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.08.2.13.41.16.62H21a2 2 0 1 1 0 4h-.1c-.03.21-.08.42-.16.62Z" />
+        </svg>
+      </button>
+      {/* Settings Modal */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60">
+          <div className="bg-white/90 rounded-2xl shadow-2xl p-8 w-full max-w-md relative border border-white/30">
+            <button
+              className="absolute top-4 right-4 text-gray-700 hover:text-black text-2xl font-bold"
+              aria-label="Close settings"
+              onClick={() => setSettingsOpen(false)}
+            >
+              &times;
+            </button>
+            <h2 className="text-2xl font-bold mb-4 text-center text-[#1DB954]">Settings</h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-800 font-medium">Theme</span>
+                <span className="text-gray-500 italic">(coming soon)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-800 font-medium">Visualizer Type</span>
+                <span className="text-gray-500 italic">(coming soon)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-800 font-medium">Show Lyrics</span>
+                <span className="text-gray-500 italic">(coming soon)</span>
+              </div>
+            </div>
+            <div className="mt-8 flex justify-center">
+              <button
+                className="px-6 py-2 bg-[#1DB954] text-white rounded-lg font-bold shadow hover:bg-[#159c43] transition"
+                onClick={() => setSettingsOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="absolute w-[600px] h-[600px] bg-[#1DB954]/20 rounded-full blur-3xl top-[-200px] left-[-200px] z-0" />
       <div className="absolute w-[400px] h-[400px] bg-[#191414]/40 rounded-full blur-2xl bottom-[-100px] right-[-100px] z-0" />
       <main className="z-10 w-full max-w-lg mx-auto p-8 rounded-2xl shadow-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col items-center">
@@ -201,19 +254,17 @@ const DashboardPage: React.FC = () => {
           <div className="text-white/80 text-lg">Loading...</div>
         ) : error ? (
           <div className="text-red-400 text-lg font-medium">{error}</div>
-        ) : nowPlaying && nowPlaying.item ? (
+        ) : nowPlayingItem ? (
           <>
             <div className="flex flex-col items-center w-full">
               <img
-                src={nowPlaying.item.album.images[0]?.url}
+                src={nowPlayingItem.album.images[0]?.url}
                 alt="Album Art"
                 className="w-48 h-48 rounded-xl shadow-lg mb-4 border border-white/20"
               />
-              <div className={`text-white text-xl font-semibold text-center mb-1 ${nunito.className}`}>
-                {nowPlaying.item.name}
-              </div>
+              <div className={`text-white text-xl font-semibold text-center mb-1 ${nunito.className}`}>{nowPlayingItem.name}</div>
               <div className="text-white/80 text-center mb-4">
-                {nowPlaying.item.artists.map((a) => a.name).join(', ')}
+                {nowPlayingItem.artists.map((a) => a.name).join(', ')}
               </div>
               {/* Progress Bar */}
               <div className="w-full flex flex-col items-center">
@@ -221,7 +272,7 @@ const DashboardPage: React.FC = () => {
                   <div
                     className="h-2 bg-[#1DB954] rounded-full transition-all duration-300"
                     style={{
-                      width: `${(localProgress / duration) * 100}%`,
+                      width: `${(localProgress / (playbackState?.duration_ms || 1)) * 100}%`,
                     }}
                   />
                 </div>
@@ -230,7 +281,7 @@ const DashboardPage: React.FC = () => {
                     {new Date(localProgress).toISOString().substr(14, 5)}
                   </span>
                   <span>
-                    {new Date(duration).toISOString().substr(14, 5)}
+                    {new Date(playbackState?.duration_ms || 0).toISOString().substr(14, 5)}
                   </span>
                 </div>
               </div>
