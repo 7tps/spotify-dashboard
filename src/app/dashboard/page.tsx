@@ -74,6 +74,24 @@ const DashboardPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [localProgress, setLocalProgress] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto';
+    }
+    return 'auto';
+  });
+
+  // apply theme
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.remove('light', 'dark');
+    if (theme === 'light') {
+      html.classList.add('light');
+    } else if (theme === 'dark') {
+      html.classList.add('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -194,16 +212,31 @@ const DashboardPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [playbackState]);
 
+  // compute background and text classes based on theme
+  const isLight = theme === 'light';
+  const bgGradient = isLight
+    ? 'bg-gradient-to-br from-white via-green-100 to-[#1DB954]'
+    : 'bg-gradient-to-br from-[#191414] via-[#232526] to-[#1DB954]';
+  const textColor = isLight ? 'text-black' : 'text-white';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#191414] via-[#232526] to-[#1DB954] relative overflow-hidden">
+    <div className={`min-h-screen flex items-center justify-center ${bgGradient} relative overflow-hidden`}>
       {/* Settings Button */}
       <button
         className="absolute top-6 right-6 z-20 bg-white/20 hover:bg-white/30 text-white rounded-full p-2 shadow-lg transition"
         aria-label="Open settings"
         onClick={() => setSettingsOpen(true)}
       >
-        {/* Standard Gear Icon */}
-        <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+        {/* Standard Gear Icon, color changes with theme */}
+        <svg
+          width="24"
+          height="24"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={isLight ? 'text-black' : 'text-white'}
+        >
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.5 1.1V21a2 2 0 1 1-4 0v-.1A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.1-1.5H3a2 2 0 1 1 0-4h.1A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6c.2-.08.41-.13.62-.16V3a2 2 0 1 1 4 0v.1c.21.03.42.08.62.16a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.08.2.13.41.16.62H21a2 2 0 1 1 0 4h-.1c-.03.21-.08.42-.16.62Z" />
         </svg>
@@ -223,7 +256,38 @@ const DashboardPage: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-800 font-medium">Theme</span>
-                <span className="text-gray-500 italic">(coming soon)</span>
+                <div className="flex gap-2">
+                  <label className="flex items-center gap-1 text-gray-700">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="auto"
+                      checked={theme === 'auto'}
+                      onChange={() => setTheme('auto')}
+                    />
+                    Auto
+                  </label>
+                  <label className="flex items-center gap-1 text-gray-700">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="light"
+                      checked={theme === 'light'}
+                      onChange={() => setTheme('light')}
+                    />
+                    Light
+                  </label>
+                  <label className="flex items-center gap-1 text-gray-700">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="dark"
+                      checked={theme === 'dark'}
+                      onChange={() => setTheme('dark')}
+                    />
+                    Dark
+                  </label>
+                </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-800 font-medium">Visualizer Type</span>
@@ -247,9 +311,9 @@ const DashboardPage: React.FC = () => {
       )}
       <div className="absolute w-[600px] h-[600px] bg-[#1DB954]/20 rounded-full blur-3xl top-[-200px] left-[-200px] z-0" />
       <div className="absolute w-[400px] h-[400px] bg-[#191414]/40 rounded-full blur-2xl bottom-[-100px] right-[-100px] z-0" />
-      <main className="z-10 w-full max-w-lg mx-auto p-8 rounded-2xl shadow-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col items-center">
+      <main className={`z-10 w-full max-w-lg mx-auto p-8 rounded-2xl shadow-2xl bg-white/10 backdrop-blur-md border border-white/20 flex flex-col items-center ${textColor}`}>
         <img src="https://upload.wikimedia.org/wikipedia/commons/8/84/Spotify_icon.svg" alt="Spotify Logo" width={48} height={48} className="mb-4 drop-shadow-lg" />
-        <h1 className={`text-2xl font-bold text-white mb-6 tracking-tight text-center drop-shadow-lg ${nunito.className}`}>Now Playing</h1>
+        <h1 className={`text-2xl font-bold mb-6 tracking-tight text-center drop-shadow-lg ${nunito.className} ${textColor}`}>Now Playing</h1>
         {loading ? (
           <div className="text-white/80 text-lg">Loading...</div>
         ) : error ? (
@@ -262,10 +326,8 @@ const DashboardPage: React.FC = () => {
                 alt="Album Art"
                 className="w-48 h-48 rounded-xl shadow-lg mb-4 border border-white/20"
               />
-              <div className={`text-white text-xl font-semibold text-center mb-1 ${nunito.className}`}>{nowPlayingItem.name}</div>
-              <div className="text-white/80 text-center mb-4">
-                {nowPlayingItem.artists.map((a) => a.name).join(', ')}
-              </div>
+              <div className={`text-xl font-semibold text-center mb-1 ${nunito.className} ${textColor}`}>{nowPlayingItem.name}</div>
+              <div className={`text-center mb-4 ${isLight ? 'text-gray-700' : 'text-white/80'}`}>{nowPlayingItem.artists.map((a) => a.name).join(', ')}</div>
               {/* Progress Bar */}
               <div className="w-full flex flex-col items-center">
                 <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-2">
@@ -276,7 +338,7 @@ const DashboardPage: React.FC = () => {
                     }}
                   />
                 </div>
-                <div className="flex justify-between w-full text-xs text-white/70">
+                <div className={`flex justify-between w-full text-xs ${isLight ? 'text-gray-600' : 'text-white/70'}`}>
                   <span>
                     {new Date(localProgress).toISOString().substr(14, 5)}
                   </span>
@@ -289,11 +351,11 @@ const DashboardPage: React.FC = () => {
             {/* Audio Features Visualizer */}
             {audioFeatures ? (
               <div className="w-full mt-8">
-                <h2 className={`text-lg font-bold text-white mb-4 text-center ${nunito.className}`}>Audio Features</h2>
+                <h2 className={`text-lg font-bold mb-4 text-center ${nunito.className} ${textColor}`}>Audio Features</h2>
                 <div className="grid grid-cols-2 gap-4">
                   {Object.entries(featureLabels).map(([key, label]) => (
                     <div key={key} className="flex flex-col items-center">
-                      <span className="text-white/80 text-sm mb-1">{label}</span>
+                      <span className={`${isLight ? 'text-gray-700' : 'text-white/80'} text-sm mb-1`}>{label}</span>
                       <motion.div
                         className="w-20 h-4 rounded-full bg-[#1DB954]/30 overflow-hidden mb-1"
                         initial={{ width: 0 }}
@@ -307,7 +369,7 @@ const DashboardPage: React.FC = () => {
                           }}
                         />
                       </motion.div>
-                      <span className="text-white/70 text-xs">
+                      <span className={`${isLight ? 'text-gray-600' : 'text-white/70'} text-xs`}>
                         {key === 'tempo'
                           ? Math.round(audioFeatures[key as keyof AudioFeatures]) + ' BPM'
                           : Math.round((audioFeatures[key as keyof AudioFeatures] as number) * 100)}
@@ -318,8 +380,8 @@ const DashboardPage: React.FC = () => {
               </div>
             ) : (
               <div className="w-full mt-8">
-                <h2 className={`text-lg font-bold text-white mb-4 text-center ${nunito.className}`}>Audio Features</h2>
-                <div className="text-white/60 text-center">Audio features not available for this track.</div>
+                <h2 className={`text-lg font-bold mb-4 text-center ${nunito.className} ${textColor}`}>Audio Features</h2>
+                <div className={`${isLight ? 'text-gray-500' : 'text-white/60'} text-center`}>Audio features not available for this track.</div>
               </div>
             )}
           </>
