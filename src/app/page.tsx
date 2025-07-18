@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import LoginButton from '../components/Auth/LoginButton';
 
 function getCookie(name: string): string | null {
@@ -13,12 +14,11 @@ function getCookie(name: string): string | null {
 
 const HomePage: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
-    // check for token
     let storedToken = typeof window !== 'undefined' ? localStorage.getItem('spotify_access_token') : null;
     if (!storedToken) {
-      // check for token in cookie
       const cookieToken = getCookie('spotify_access_token');
       if (cookieToken) {
         localStorage.setItem('spotify_access_token', cookieToken);
@@ -27,6 +27,22 @@ const HomePage: React.FC = () => {
     }
     setToken(storedToken);
   }, []);
+
+  useEffect(() => {
+    console.log('Token in effect:', token);
+    if (token) {
+      try {
+        router.replace('/dashboard');
+        setTimeout(() => {
+          if (window.location.pathname !== '/dashboard') {
+            window.location.replace('/dashboard');
+          }
+        }, 500);
+      } catch (e) {
+        window.location.replace('/dashboard');
+      }
+    }
+  }, [token, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#191414] via-[#232526] to-[#1DB954] relative overflow-hidden">
@@ -38,11 +54,7 @@ const HomePage: React.FC = () => {
           <h1 className="text-3xl font-bold text-white mt-4 mb-2 tracking-tight text-center drop-shadow-lg">Spotify Now Playing Dashboard</h1>
           <p className="text-white/80 text-center text-lg font-medium">See what’s playing, live audio features, and more.</p>
         </div>
-        {!token ? (
-          <LoginButton />
-        ) : (
-          <div className="text-white text-xl font-semibold text-center">Welcome! You are logged in with Spotify.</div>
-        )}
+        <LoginButton />
       </main>
     </div>
   );
