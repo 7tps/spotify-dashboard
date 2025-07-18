@@ -27,12 +27,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: data }, { status: 400 });
   }
 
-  // set access token to cookie
-  const res = NextResponse.redirect(new URL('/', req.url));
-  res.cookies.set('spotify_access_token', data.access_token, {
-    httpOnly: false, 
-    path: '/',
-    maxAge: data.expires_in || 3600,
-  });
-  return res;
+  // pass access_token as a query parameter
+  return NextResponse.redirect(
+    new URL(`/dashboard?access_token=${data.access_token}`, req.url)
+  );
 } 
